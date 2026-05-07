@@ -1,0 +1,57 @@
+version: "3.9"
+
+services:
+  gel-db:
+    image: geldata/gel
+    container_name: gel-db
+    ports:
+      - "5656:5656"
+    environment:
+      GEL_SERVER_PASSWORD: secret
+      GEL_SERVER_TLS_CERT_MODE: generate_self_signed
+      GEL_SERVER_SECURITY: insecure_dev_mode
+    volumes:
+      - gel_data:/var/lib/gel/data
+    
+  app:
+    build:
+      context: ./App_gel
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    user: "1000:1000"
+    volumes:
+      - ./downloads:/app/downloads
+    environment:
+      - GEL_DSN=gel://admin:secret@gel-db:5656?tls_security=insecure
+    depends_on:
+      - gel-db
+
+  app_arquivo:
+    build:
+      context: ./App_arquivo
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8001:8000"
+    
+  app_streamlit:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+
+  app_chat:
+    build:
+      context: ./chat
+    command: streamlit run chat.py --server.port 8502 --server.address 0.0.0.0
+    ports:
+      - "8502:8502"
+    volumes:
+      - ./chat:/app
+    depends_on:
+      - app
+
+
+volumes:
+  gel_data:

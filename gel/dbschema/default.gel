@@ -1,0 +1,53 @@
+module default {
+
+    type Pessoa{
+        required cpfPessoa: str{
+            constraint exclusive;
+        }
+        required nomePessoa: str;
+        required senhaPessoa: str;
+    }
+
+    scalar type Formacao extending enum<primario,medio,superior>;
+
+    type Gerente extending Pessoa{
+        required emailGerente: str;
+        required formacaoGerente: Formacao;
+    }
+
+    type Endereco{ rua: str; cep:str; numero:int16;}
+
+    type Empregado extending Pessoa{       
+          required multi telefone: str;
+          required endereco: Endereco;
+          multi areas: Area;
+          required matriculaEmpregador: str{
+            constraint exclusive;
+          }
+
+    }
+
+    type Area{
+        required nomeArea: str;
+        gerente: Gerente;
+    }
+
+    type ItemNota {
+        required produto: Produto;
+        required qtdVenda: int16;
+        required precoUnid: decimal;
+    }
+
+    type NotaFiscal {
+        required empregado: Empregado;
+        required data: cal::local_date;
+
+        multi itens: ItemNota;
+    }
+
+    type Produto{
+        required nomeProduto:str;
+        multi areas: Area;
+    }
+
+}

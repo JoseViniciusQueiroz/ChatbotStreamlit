@@ -1,0 +1,14 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instala as dependências necessárias
+RUN pip install fastapi uvicorn gel
+RUN pip install fastapi uvicorn httpx
+
+
+# Copia o código para dentro do container
+COPY . .
+
+# O comando real será sobrescrito pelo 'command' do docker-compose
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

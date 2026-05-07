@@ -1,0 +1,310 @@
+import streamlit as st
+import requests
+import json
+
+st.set_page_config(
+    page_title="Painel",
+    layout="wide",
+    page_icon="📊"
+)
+
+st.markdown("""
+<style>
+
+/* Fundo geral mais claro */
+[data-testid="stAppViewContainer"] {
+    background-color: #f5f7fb;
+    color: #1f2937;
+}
+
+/* Sidebar limpa */
+[data-testid="stSidebar"] {
+    background-color: #ffffff;
+    border-right: 1px solid #e5e7eb;
+}
+
+/* Título sidebar */
+[data-testid="stSidebar"] h1 {
+    color: #111827;
+}
+
+/* Botões do menu (sem cara de botão) */
+.stSidebar button {
+    background: none !important;
+    border: none !important;
+    color: #374151 !important;
+    text-align: left;
+    padding: 10px 5px;
+    font-size: 15px;
+}
+
+/* Hover bonito */
+.stSidebar button:hover {
+    color: #2563eb !important;
+}
+
+/* Card */
+.card {
+    padding: 16px;
+    border-radius: 12px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    margin-bottom: 10px;
+}
+
+/* Inputs */
+.stTextInput input, .stNumberInput input {
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+}
+
+/* Botões normais (não menu) */
+.stButton button {
+    border-radius: 8px;
+    background-color: #2563eb;
+    color: white;
+}
+
+/* Tabs */
+.stTabs [role="tab"] {
+    color: #6b7280;
+}
+
+.stTabs [aria-selected="true"] {
+    color: #111827 !important;
+    border-bottom: 2px solid #2563eb;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+API_URL = "http://app:8000"
+
+
+
+st.sidebar.markdown("## 📊 Painel")
+
+if "pagina" not in st.session_state:
+    st.session_state.pagina = "Home"
+
+def set_page(p):
+    st.session_state.pagina = p
+
+st.sidebar.button("Home", on_click=set_page, args=("Home",))
+st.sidebar.button("Busca", on_click=set_page, args=("Busca",))
+st.sidebar.button("Cadastro", on_click=set_page, args=("Cadastro",))
+
+pagina = st.session_state.pagina
+
+def listar(endpoint):
+    try:
+        response = requests.get(f"{API_URL}/{endpoint}")
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"Erro ao buscar {endpoint}")
+            return []
+    except Exception as e:
+        st.error(f"Erro de conexão: {e}")
+        return []
+
+
+# ---------- HOME ----------
+if pagina == "Home":
+    st.title("📥 Download de Arquivos")
+
+    file_id = st.text_input("ID do arquivo", placeholder="Ex: 123")
+
+    if st.button("🔽 Buscar arquivo"):
+        if not file_id:
+            st.warning("Informe um ID válido")
+        else:
+            with st.spinner("Baixando..."):
+                try:
+                    response = requests.get(f"{API_URL}/baixar/{file_id}", stream=True)
+
+                    if response.status_code == 200:
+                        st.success("Arquivo pronto!")
+                        st.download_button(
+                            label="📄 Baixar PDF",
+                            data=response.content,
+                            file_name=f"{file_id}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                    else:
+                        st.error("Erro ao baixar")
+
+                except Exception as e:
+                    st.error(f"Erro: {e}")
+
+# ---------- BUSCA ----------
+if pagina == "Busca":
+    st.markdown("## 🔎 Consultas")
+
+    abas = st.tabs(["Gerentes", "Empregados", "Áreas"])
+
+    # -------- GERENTES --------
+    with abas[0]:
+        st.subheader("Gerentes")
+
+        if st.button("Atualizar Gerentes"):
+            st.session_state.gerentes = listar("Gerentes")
+
+        if "gerentes" in st.session_state:
+            for g in st.session_state.gerentes:
+                st.markdown(f"""
+                <div class="card">
+                    <strong>{g['nomePessoa']}</strong><br>
+                    CPF: {g['cpfPessoa']}
+                </div>
+                """, unsafe_allow_html=True)
+
+    # -------- EMPREGADOS --------
+    with abas[1]:
+        st.subheader("Empregados")
+
+        if st.button("Atualizar Empregados"):
+            st.session_state.empregados = listar("Empregados")
+
+        if "empregados" in st.session_state:
+            for emp in st.session_state.empregados:
+                st.markdown(f"""
+                <div class="card">
+                    <strong>{emp['nomePessoa']}</strong><br>
+                    CPF: {emp['cpfPessoa']}
+                </div>
+                """, unsafe_allow_html=True)
+
+    # -------- AREAS --------
+    with abas[2]:
+        st.subheader("Áreas")
+
+        if st.button("Atualizar Áreas"):
+            st.session_state.areas = listar("Area")
+
+        if "areas" in st.session_state:
+            for area in st.session_state.areas:
+                st.markdown(f"""
+                <div class="card">
+                    📁 {area['nomeArea']}
+                </div>
+                """, unsafe_allow_html=True)
+
+# ---------- CADASTRO ----------
+if pagina == "Cadastro":
+    st.title("📝 Cadastros")
+
+    abas = st.tabs([
+        "Empregado",
+        "Área",
+        "Produto",
+        "Nota Fiscal"
+    ])
+
+    # ---- EMPREGADO ----
+    with abas[0]:
+        st.subheader("Novo Empregado")
+
+        with st.form("form_empregado"):
+            cpf = st.text_input("CPF")
+            nome = st.text_input("Nome")
+            senha = st.text_input("Senha", type="password")
+            telefone = st.text_input("Telefones (vírgula)")
+            rua = st.text_input("Rua")
+            cep = st.text_input("CEP")
+            numero = st.number_input("Número", step=1)
+            matricula = st.text_input("Matrícula")
+
+            submit = st.form_submit_button("Salvar")
+
+        if submit:
+            payload = {
+                "cpf": cpf,
+                "nome": nome,
+                "senha": senha,
+                "telefone": [t.strip() for t in telefone.split(",")],
+                "rua": rua,
+                "cep": cep,
+                "numero": int(numero),
+                "matricula": matricula
+            }
+
+            res = requests.post(f"{API_URL}/Empregado", json=payload)
+            st.success(res.json())
+
+    # ---- AREA ----
+    with abas[1]:
+        st.subheader("Nova Área")
+
+        nome = st.text_input("Nome da Área")
+        cpf = st.text_input("CPF do Gerente")
+
+        if st.button("Criar Área"):
+            res = requests.post(f"{API_URL}/Area", json={
+                "nomeArea": nome,
+                "cpfGerente": cpf
+            })
+            st.success(res.json())
+
+    # ---- PRODUTO ----
+    with abas[2]:
+        st.subheader("Novo Produto")
+
+        nome = st.text_input("Nome do Produto")
+        areas = st.text_input("Áreas (vírgula)")
+
+        if st.button("Criar Produto"):
+            res = requests.post(f"{API_URL}/Produto", json={
+                "nomeProduto": nome,
+                "areas": [a.strip() for a in areas.split(",")]
+            })
+            st.success(res.json())
+
+    # ---- NOTA FISCAL ----
+    with abas[3]:
+        st.subheader("Criar Nota + Itens")
+
+        col1, col2 = st.columns(2)
+
+        # Criar nota
+        with col1:
+            st.markdown("### 🧾 Criar Nota")
+
+            cpf = st.text_input("CPF do Empregado")
+
+            if st.button("Criar Nota"):
+                res = requests.post(f"{API_URL}/CriarNota", json={
+                    "cpfEmpregado": cpf
+                })
+
+                if res.status_code == 200:
+                    data = res.json()
+                    st.session_state.nota_id = data["nota"][0]["id"]
+                    st.success(f"Nota criada! ID: {st.session_state.nota_id}")
+                else:
+                    st.error(res.text)
+
+        # Adicionar item
+        with col2:
+            st.markdown("### ➕ Adicionar Item")
+
+            if "nota_id" in st.session_state:
+                produto = st.text_input("Produto")
+                qtd = st.number_input("Quantidade", min_value=1)
+                preco = st.number_input("Preço", min_value=0.0)
+
+                if st.button("Adicionar Item"):
+                    res = requests.post(f"{API_URL}/AdicionarItem", json={
+                        "idNota": st.session_state.nota_id,
+                        "produto": produto,
+                        "qtd": int(qtd),
+                        "preco": float(preco)
+                    })
+
+                    if res.status_code == 200:
+                        st.success("Item adicionado!")
+                    else:
+                        st.error(res.text)
+            else:
+                st.info("Crie uma nota primeiro")
