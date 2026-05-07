@@ -44,9 +44,9 @@ services:
   app_chat:
     build:
       context: ./chat
-    command: streamlit run chat.py --server.port 8502 --server.address 0.0.0.0
+    command: streamlit run chat.py --server.port 8503 --server.address 0.0.0.0
     ports:
-      - "8502:8502"
+      - "8503:8503"
     volumes:
       - ./chat:/app
     depends_on:
