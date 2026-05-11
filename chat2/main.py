@@ -10,9 +10,9 @@ import plotly.express as px
 from datetime import datetime, timedelta
 from collections import defaultdict
 
-from agent import AIAgent
-from logger import logger
-from functions import registry
+from .agent import AIAgent
+from .logger import logger
+from .functions import registry
 
 
 # ============================================================================

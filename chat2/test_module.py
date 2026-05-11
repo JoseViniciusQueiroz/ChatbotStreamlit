@@ -4,9 +4,9 @@ Testes para as funções do sistema
 """
 
 import unittest
-from functions import multiplicar, calcular_decimal, saudacao, FunctionRegistry
-from agent import AIAgent
-from logger import Logger
+from .functions import multiplicar, calcular_decimal, saudacao, FunctionRegistry
+from .agent import AIAgent
+from .logger import Logger
 
 
 class TestFunctions(unittest.TestCase):

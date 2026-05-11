@@ -3,9 +3,9 @@ Exemplos de Uso e Testes
 Demonstra como usar os componentes do sistema
 """
 
-from agent import AIAgent
-from functions import registry
-from logger import logger
+from .agent import AIAgent
+from .functions import registry
+from .logger import logger
 
 
 def exemplo_1_basico():

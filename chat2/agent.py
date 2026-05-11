@@ -6,8 +6,8 @@ Interpreta a intenção do usuário e decide qual função chamar
 import re
 import time
 from typing import Dict, Tuple, Optional, Any
-from functions import registry
-from logger import logger
+from .functions import registry
+from .logger import logger
 
 
 class AIAgent:
