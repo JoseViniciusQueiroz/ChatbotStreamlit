@@ -1,23 +1,27 @@
 import streamlit as st
-
+import os
+import json
 from intents.parser import (
     identificar_intencao,
     identificar_layout
 )
-
 from core.executer import (
     executar_acao,
     renderizar_resposta
 )
 import time
 from datetime import datetime
-
 import pandas as pd
 import plotly.graph_objects as go
-
-# Metrics / Logging (local `chat` package)
 from logger import logger
 from observability import ExecutionMetrics
+from dotenv import load_dotenv
+from openai import OpenAI
+
+
+load_dotenv()
+
+
 
 st.set_page_config(page_title="Chat", layout="wide")
 
@@ -29,7 +33,7 @@ if "messages" not in st.session_state:
 if "tema" not in st.session_state:
     st.session_state.tema = "Claro"
 
-# Inicializar logger/metrics (preserva comunicação com DB)
+
 if "execution_metrics" not in st.session_state:
     st.session_state.execution_metrics = []
 
@@ -169,9 +173,7 @@ div[data-testid="stChatInput"] button:hover {
 """, unsafe_allow_html=True)
 
 
-# ============================================================================
-# CONFIGURAÇÕES (DIALOG)
-# ============================================================================
+
 
 @st.dialog("⚙️ Configurações")
 def config_dialog():
@@ -188,6 +190,31 @@ def config_dialog():
         st.success("Configurações salvas!")
         st.rerun()
 
+
+def _call_openrouter_api(messages, model=None, api_key=None):
+    api_key = (
+        api_key
+        or os.getenv("OPENROUTER_API_KEY")
+    )
+    if not api_key:
+        raise RuntimeError("OPENROUTER_API_KEY não configurada")
+    model = (
+        model
+        or os.getenv("OPENROUTER_MODEL")
+        or "deepseek/deepseek-v4-flash"
+    )
+    try:
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key
+        )
+        resp = client.chat.completions.create(
+            model=model,
+            messages=messages
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        raise RuntimeError(f"Erro OpenRouter: {e}")
 
 with st.sidebar:
     st.markdown("### ⚙️ Controles")
@@ -217,103 +244,133 @@ with st.sidebar:
         config_dialog()
 
 
-# ============================================================================
-# LAYOUT
-# ============================================================================
-
 tab_chat, tab_logs, tab_charts, tab_docs = st.tabs(
-    ["💬 Chat", "📋 Logs", "📈 Charts", "📖 Docs"]
+    ["Chat", "Logs", "Charts", "Docs"]
 )
 
-
 with tab_chat:
-
     col_chat, col_debug = st.columns([3, 1])
-
-
-    # ============================================================================
-    # CHAT
-    # ============================================================================
-
     with col_chat:
-
         chat_container = st.container(height=500)
-
-    # ----------------------------
-    # INPUT
-    # ----------------------------
     if prompt := st.chat_input("Digite sua mensagem..."):
 
-        # Log da mensagem do usuário
         logger.log_message("user", prompt)
-
         st.session_state.messages.append({
             "role": "user",
             "content": prompt
         })
-
         intent = identificar_intencao(prompt)
         layout = identificar_layout(prompt)
-
-        # Executar ação e medir tempo
         with st.spinner("Pensando..."):
             start = time.time()
-            try:
-                resposta = executar_acao(intent)
-                error = None
-            except Exception as e:
-                resposta = f"❌ Erro: {e}"
-                error = str(e)
-            exec_time = (time.time() - start) * 1000
+            error = None
+            openrouter_key = os.getenv("OPENROUTER_API_KEY")
+            function_name = None
+            resposta = ""
+            if openrouter_key:
+                function_name = "openrouter_call"
+                try:
+                    contexto_banco = ""
+                    if intent:
+                        try:
+                            contexto_banco = executar_acao(intent)
+                        except Exception as e:
+                            contexto_banco = f"""
+                                              Erro ao buscar contexto:
+                                              {e} 
+                                              """
+                    system_prompt = f"""
+                    You are an advanced AI assistant integrated into a Streamlit application.
+                    Detected intent:
+                    {intent}
+                    Behavior rules:
+                    - Always answer in Brazilian Portuguese.
+                    - Be clear and objective.
+                    - Use markdown formatting.
+                    - Use database context when relevant.
+                    - Do not invent information.
+                    - If uncertain, say so.
+                    - Keep responses concise.
+                    """
+                    messages_payload = []
+                    messages_payload.append({
+                        "role": "system",
+                        "content": system_prompt
+                    })
+                    if contexto_banco:
 
-        # Registrar execução no logger e nas métricas
+                        messages_payload.append({
+                            "role": "system",
+                            "content": f"""
+                                        Relevant database information:
+                                        {contexto_banco}
+                                        Use this information only if relevant to the user request.
+                                        """
+                        })
+                    historico = st.session_state.messages[-10:]
+                    for m in historico:
+                        messages_payload.append({
+                            "role": m.get("role", "user"),
+                            "content": m.get("content", "")
+                        })
+                    resposta = _call_openrouter_api(
+                        messages=messages_payload
+                    )
+
+                except Exception as e:
+                    error = str(e)
+                    resposta = f"""
+                    Erro ao chamar IA:
+                    {e}
+                    """
+            else:
+                function_name = "executar_acao"
+                try:
+                    resposta = executar_acao(intent)
+                except Exception as e:
+                    resposta = f"Erro: {e}"
+                    error = str(e)
+            exec_time = (time.time() - start) * 1000
         try:
+
             logger.log_function_call(
-                function_name="executar_acao",
-                params={"intent": intent},
+                function_name=(function_name or "executar_acao"),
+                params={
+                    "intent": intent
+                },
                 result=resposta,
                 error=error,
                 execution_time_ms=exec_time
             )
+
         except Exception:
             pass
-
         try:
             st.session_state.metrics.track_execution(
-                function_name="executar_acao",
-                params={"intent": intent},
+                function_name=(function_name or "executar_acao"),
+                params={
+                    "intent": intent
+                },
                 result=resposta,
                 execution_time_ms=exec_time,
                 error=error
             )
         except Exception:
             pass
-
-        # Armazenar métrica para exibição simples
         st.session_state.execution_metrics.append({
             "input": prompt,
             "exec_time": exec_time,
             "timestamp": datetime.now().isoformat()
         })
-
-        # Log da resposta do assistant
         logger.log_message("assistant", str(resposta))
-
         st.session_state.messages.append({
             "role": "assistant",
             "layout": layout,
             "content": resposta
         })
-
-    # ----------------------------
-    # RENDER CHAT
-    # ----------------------------
     with chat_container:
-
         for msg in st.session_state.messages:
-
             with st.chat_message(msg["role"]):
-
                 if msg["role"] == "user":
                     st.markdown(msg["content"])
                 else:
@@ -324,11 +381,8 @@ with tab_chat:
 
 
 with tab_logs:
-
     st.markdown("### Logs")
-
     logs = logger.get_all_logs()
-
     if logs:
         df = pd.DataFrame(logs)
         df = df.astype(str)
@@ -336,24 +390,16 @@ with tab_logs:
     else:
         st.info("Nenhum log ainda")
 
-
 with tab_charts:
-
     st.markdown("### Performance")
-
     func_logs = logger.get_function_logs()
-
     if func_logs:
-
         times = [l.get("execution_time_ms", 0) for l in func_logs]
-
         fig = go.Figure()
         fig.add_trace(go.Scatter(y=times, mode="lines+markers"))
-
         st.plotly_chart(fig, use_container_width=True)
 
     else:
-        # Fallback para métricas coletadas em session_state
         hist = getattr(st.session_state.metrics, "execution_history", [])
         if hist:
             times = [e.get("execution_time_ms", 0) for e in hist]
@@ -365,16 +411,11 @@ with tab_charts:
 
 
 with tab_docs:
-
-    st.markdown("### 📖 Documentação")
-
+    st.markdown("### Documentação")
     col1, col2 = st.columns(2)
-
     with col1:
-
         st.markdown("""
         **Objetivo**
-
         Este chat integra:
         - Comunicação com banco (gel)
         - Function calling

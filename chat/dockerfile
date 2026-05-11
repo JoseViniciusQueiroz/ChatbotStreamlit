@@ -7,6 +7,8 @@ COPY . .
 RUN pip install streamlit
 RUN pip install streamlit plotly
 RUN pip install streamlit logger
+RUN pip install python-dotenv
+RUN pip install openai
 
 EXPOSE 8501
 

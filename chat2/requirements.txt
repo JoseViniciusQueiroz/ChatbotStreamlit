@@ -1,6 +1,7 @@
 streamlit>=1.28.0
 pandas>=2.0.0
 plotly>=5.10.0
+python-dotenv>=0.21.0
 
 # Opcional - Observabilidade
 # opentelemetry-api>=1.15.0
